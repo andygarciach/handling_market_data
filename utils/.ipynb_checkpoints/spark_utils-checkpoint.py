@@ -1,5 +1,6 @@
 from pyspark.sql import SparkSession
 
+## Spark Utils class handles all the required steps to build a spark session with error handling. 
 class Spark_utils():
 
     def __init__(self, env: str, appName: str):
