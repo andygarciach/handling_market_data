@@ -1,6 +1,7 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
 from pyspark.sql.types import StructType, StructField, IntegerType, StringType, DateType, DoubleType
+from pyspark.sql.window import Window
 from utils import Utils
 from utils.Utils import Transformer
 from utils.spark_utils import Spark_utils
@@ -125,8 +126,53 @@ def main():
     df_pays.show(truncate = False)
     ##df_prints.show(10, truncate = False)
 
-    ######### Sorting weeks of year per user id to identify the latest one ########
-    ######### Both prints and taps dataframe should be processed ########
+    ######### Processing the dataframes to calculate ########
+    ### For each row in prints: 
+    ###      how many times the user has been seen a value prop in the last 3 weeks.
+    ###      Number of prints that the user clicked in the last 3 weeks for the same value prop.
+    ###      Number of prints that the user paid in the last 3 weeks for the same value prop.
+    ###      Total ammout paid by the user in the last 3 weeks for the same value prop.
+    ### Finally, filter the dataset for the latest week prints per user. 
+
+    ### There needs to define an specific lambda function to represent days as seconds. The intention of this is to calculate window frames between 21 days. (3 weeks in the past)
+    ### The current row would not taken into account to calculate the number of clicks or pays in the last 3 weeks.
+    days = lambda i: i * 86400 ## total number of seconds per day
+
+    ### a Window is required to define the partition (per user, per print_label) and ordered by date. This date is a bigint (linux timestamp). 21 days represents 7 days per week (7 days * 3 weeks)
+    window_spec = Window.partitionBy("a.user_id","a.value_prop").orderBy(col("date")).rangeBetween(days(-21), days(-1))
+
+    ### New columns required for ordering and required value prop in prints.
+    logger.info("Adding date, value_prop columns in Prints...")
+    df_prints = df_prints.withColumn("date",to_timestamp(col("day")).cast("bigint"))
+    df_prints = df_prints.withColumn("value_prop",(col("event_data.value_prop")))
+
+    ### Calculating how many times a value prop has been seen in the last 3 weeks
+    logger.info("Calculating number of records in Prints had been seen in the last 3 weeks...")
+    df_prints = df_prints.alias("a").withColumn("count_print_last_3_weeks",count("a.user_id").over(window_spec))
+
+    ### Joining df_prints and df_taps to identify the value_props that were clicked per user in the last 3 weeks.
+    ### The number of clicked value props is calculated as well.
+    logger.info("Linking prints and taps, identifying the print rows with clicks, calculating number of clicks in the last 3 weeks...")
+    df_join = df_prints.alias("a").join(df_taps.alias("b"), (col("a.user_id") == col("b.user_id")) \
+                                        & (col("a.event_data") == col("b.event_data")) \
+                                        & (col("a.day") == col("b.day")), "leftouter") \
+    .withColumn("clicked", when(expr("b.user_id is not null"), "Y").otherwise("N")) \
+    .withColumn("count_click_last_3_weeks",count("b.user_id").over(window_spec)) \
+    .select("a.*","clicked","count_click_last_3_weeks")
+
+    ### Defining the result dataset with proper calculations.
+    logger.info("Calculating number of pays and total paid in the last 3 weeks, preparing dataset to show...")
+    dataset = df_join.join(df_pays.alias("c"), (col("a.day") == col("c.pay_date")) \
+                           & (col("a.value_prop") == col("c.value_prop")) \
+                           & (col("a.user_id") == col("c.user_id")), \
+                           "leftouter") \
+    .withColumn("count_pays_last_3_weeks", count("c.user_id").over(window_spec)) \
+    .withColumn("sum_pays_last_3_weeks", sum("c.total").over(window_spec))
+
+    # Retrieving results
+    logger.info("Showing Results and dataset for Model consumpation:")
+    dataset.select("a.*","clicked","count_click_last_3_weeks","count_pays_last_3_weeks","sum_pays_last_3_weeks").na.fill(0).where(col("a.rank_num")==1) \
+    .show(100, truncate = False)
 
 if __name__ == '__main__':
     main()

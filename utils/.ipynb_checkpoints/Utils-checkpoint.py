@@ -5,7 +5,7 @@ import json
 import pandas
 
 ## Transformer Class ##
-## This class has some attributes and methods which enables an open framework to process Spark DataFrame and Pandas
+## This class has some methods which enable an open framework to process Spark DataFrames.
 
 class Transformer ():
     
@@ -35,11 +35,11 @@ class Transformer ():
         try:
             
             if orderAs == "asc":
-                ##window = Window.partitionBy(*[col(c) for c in partitionCols]).orderBy(*[col(c).asc() for c in orderByCols])
-                window = Window.orderBy(*[col(c).asc() for c in orderByCols])
+                window = Window.partitionBy(*[col(c) for c in partitionCols]).orderBy(*[col(c).asc() for c in orderByCols])
+                ##window = Window.orderBy(*[col(c).asc() for c in orderByCols])
             elif orderAs == "desc":
-                ##window = Window.partitionBy(*[col(c) for c in partitionCols]).orderBy(*[col(c).desc() for c in orderByCols])
-                window = Window.orderBy(*[col(c).desc() for c in orderByCols])
+                window = Window.partitionBy(*[col(c) for c in partitionCols]).orderBy(*[col(c).desc() for c in orderByCols])
+                ##window = Window.orderBy(*[col(c).desc() for c in orderByCols])
             else:
                 print("Expected 'asc' or 'desc' as order type for Rank Function") 
             
