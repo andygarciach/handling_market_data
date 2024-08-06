@@ -1,6 +1,6 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
-from pyspark.sql.types import StructType, StructField, IntegerType, StringType, DateType
+from pyspark.sql.types import StructType, StructField, IntegerType, StringType, DateType, DoubleType
 from utils import Utils
 from utils.Utils import Transformer
 from utils.spark_utils import Spark_utils
@@ -53,10 +53,18 @@ def main():
     StructField("user_id", IntegerType(), True)
     ])
     
-    df_taps = spark.read.json("data_sources/taps.json")
+    df_taps = spark.read.json("data_sources/taps.json", schema = taps_schema)
 
     ## Reading "prints.json" data to dataframe
-    df_pays = spark.read.option("header","True").csv("data_sources/pays.csv")
+
+    pays_schema = StructType([
+    StructField("pay_date", DateType(), True),
+    StructField("total", DoubleType(), True),
+    StructField("user_id", IntegerType(), True),
+    StructField("value_prop", StringType(), True)
+    ])
+    
+    df_pays = spark.read.option("header","True").csv("data_sources/pays.csv", schema = pays_schema)
 
     logger.info("3 New Datasets were created")
 
